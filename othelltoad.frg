@@ -100,7 +100,6 @@ pred isBetweenBoundaries[bound1: Int, bound2: Int, position: Int] {
 pred isBetweenHorizontal[startRow: Int, startCol: Int, endRow: Int, endCol: Int, row: Int, col: Int] {
     // All the rows are the same
     startRow = endRow and row = startRow
-
     // The column appears between the boundaries
     isBetweenBoundaries[startCol, endCol, col]
 }
@@ -112,6 +111,7 @@ pred isBetweenVertical[startRow: Int, startCol: Int, endRow: Int, endCol: Int, r
     isBetweenBoundaries[startRow, endRow, row]
 }
 
+// NOTE: Consider using a different diagonal calculation approach
 pred onDiagonal[row1: Int, col1: Int, row2: Int, col2: Int] {
     some offset: Int | {
         (add[row1, offset] = row2 and add[col1, offset] = col2) or
@@ -124,7 +124,7 @@ pred onDiagonal[row1: Int, col1: Int, row2: Int, col2: Int] {
 pred isBetweenDiagonal[startRow: Int, startCol: Int, endRow: Int, endCol: Int, row: Int, col: Int] {
     isBetweenBoundaries[startRow, endRow, row] and isBetweenBoundaries[startCol, endCol, col]
 
-    // slope between start and end and also start and the position has to be 1 or -1
+    // Slope between start and end and also start and the position has to be 1 or -1
     onDiagonal[startRow, startCol, endRow, endCol]
     onDiagonal[startRow, startCol, row, col]
 }
@@ -137,20 +137,51 @@ pred isBetween[startRow: Int, startCol: Int, endRow: Int, endCol: Int, row: Int,
     isBetweenDiagonal[startRow, startCol, endRow, endCol, row, col]
 }
 
-pred isValidMove[p: Player, s: GameState, row: Int, col: Int] {
-    // TODO: Given row, col, is there a continuous string of the other player's pieces
-    // "between" one of p's pieces and (row, col)
-    // Note: Between needs to take into account horizontal, vertical, and diagonal
+fun playerToPiece(p: Player): Tile {
+    {p = Black => BlackPiece else WhitePiece}
+}
+
+fun oppositePlayer(p: Player): Player {
+    {p = Black => White else Black}
+}
 
 
-    // Something like this:
-    // all row, col: Int | isBetween[...] implies other playre's pieces 
+// pred [p: Player, s: GameState, startRow: Int, startCol: Int, endRow: Int, endCol: Int] {
+//     // The below checks that this move will flip some of the opponent's pieces.
+//     // Given startRow, startCol, is there a continuous string of the other player's pieces
+//     // "between" one of p's pieces and (row, col)
 
+//         // The player p already has a piece at this position
+//         s.board.contents[endRow][endCol] = playerToPiece[p]
+
+//         // For everything between (startRow, startCol) and (endRow, endCol)
+//         all betweenRow, betweenCol: Int | isBetween[startRow, startCol, endRow, endCol, betweenRow, betweenCol] implies {
+//             // The opponent has a piece there
+//             s.board.contents[betweenRow][betweenCol] = playerToPiece[oppositePlayer[p]]
+//         }
+// }
+
+pred isValidMove[p: Player, s: GameState, startRow: Int, startCol: Int] {
     // Moving onto an empty tile
-    s.board.contents[row][col] = Empty
+    s.board.contents[startRow][startCol] = Empty
 
     // Both row and column are valid indices
-    validIndex[row] and validIndex[col]
+    validIndex[startRow] and validIndex[startCol]
+
+    // The below checks that this move will flip some of the opponent's pieces.
+    // Given startRow, startCol, is there a continuous string of the other player's pieces
+    // "between" one of p's pieces and (row, col)
+    some endRow, endCol: Int | {
+        // The player p already has a piece at this position
+        s.board.contents[endRow][endCol] = playerToPiece[p]
+
+        // TODO: This is an efficiency bottleneck
+        // For everything between (startRow, startCol) and (endRow, endCol)
+        all betweenRow, betweenCol: Int | isBetween[startRow, startCol, endRow, endCol, betweenRow, betweenCol] implies {
+            // The opponent has a piece there
+            s.board.contents[betweenRow][betweenCol] = playerToPiece[oppositePlayer[p]]
+        }
+    }
 }
 
 pred canMove[p: Player, s: GameState] {
@@ -162,7 +193,7 @@ pred validFinal[s: GameState] {
 }
 
 pred validTransition[pre: GameState, post: GameState] {
-    canMove[pre.turn] implies {
+    canMove[pre.turn, pre] implies {
         some row, col: Int | {
             move[pre, post, row, col]
         }
@@ -178,6 +209,60 @@ pred skip[pre: GameState, post: GameState] {
     // Everything else about the board stays the same
     all row, col: Int | pre.board.contents[row][col] = post.board.contents[row][col]
 }
+
+pred correctFlipping[pre: GameState, post: GameState, moveRow: Int, moveCol: Int] {
+
+    // TODO: This will have to check that flipping of pieces happens in ALL
+    // the places where it should
+    // All the other tiles remain the same
+    // all endRow, endCol: Int | {
+    //         (endRow != moveRow) or (endCol != moveCol)
+    //         validIndex[endRow] 
+    //         validIndex[endCol] 
+    //         pre.board.contents[endRow][endCol] = playerToPiece[p]
+    //     } implies {
+
+    //         (all betweenRow, betweenCol: Int | {
+    //             isBetween[moveRow, moveCol, endRow, endCol, betweenRow, betweenCol] implies
+    //             pre.board.contents[betweenRow][betweenCol] = playerToPiece[oppositePlayer[p]]
+    //         })
+    //         implies {
+    //             // The piece between these two bounds has flipped
+    //             post.board.contents[betweenRow][betweenCol] = playerToPiece[p]
+    //         } 
+            
+    
+    //     }
+    // }   
+
+    all row, col: Int | (validIndex[row] and validIndex[col]) implies {
+
+        // There is some other position where the player whose turn it is moved
+        some endRow, endCol: Int | {
+            (endRow != moveRow) or (endCol != moveCol)
+            validIndex[endRow] 
+            validIndex[endCol] 
+            pre.board.contents[endRow][endCol] = playerToPiece[pre.turn] 
+
+            // Everything between the move position and this position is the oppoent's pieces
+            all betweenRow, betweenCol: Int | {
+                isBetween[moveRow, moveCol, endRow, endCol, betweenRow, betweenCol] implies
+                pre.board.contents[betweenRow][betweenCol] = playerToPiece[oppositePlayer[pre.turn]]
+            }
+
+            // (row, col) is contained within the outflanked section
+            isBetween[moveRow, moveCol, endRow, endCol, row, col]
+        }
+        implies {
+            // The piece has flipped
+            post.board.contents[row][col] = playerToPiece[pre.turn]
+        } else {
+            // The piece has stayed the same
+            post.board.contents[row][col] = pre.board.contents[row][col]
+        }
+    }
+}
+
 
 pred move[pre: GameState, post: GameState, row: Int, col: Int] {
     // == Guard - stuff true about pre == 
@@ -196,20 +281,21 @@ pred move[pre: GameState, post: GameState, row: Int, col: Int] {
     // The player whose turn it was put down their piece at (row, col)
     post.board.contents[row][col] = {pre.turn = Black => BlackPiece else WhitePiece}
 
-    // All the other tiles remain the same
-    all row2, col2: Int | (validIndex[row2] and validIndex[col2]) implies {
-        ((row2 != row) or (col2 != col)) implies {
-            // TODO: This is wrong - some of the pieces may flip, in which case they are not the same
-            pre.board.contents[row2][col2] = post.board.contents[row2][col2]
-        }
-    }
+    // Flipping of opponent's pieces has occurred where appropriate
+    correctFlipping[pre, post, row, col]
+}
 
-    // TODO: This will have to check that flipping of pieces happens in ALL
-    // the places where it should
+pred traces {
+    validInit[Game.initialState]
+
+    all s: GameState | some Game.next[s] implies {
+        validTransition[s, Game.next[s]]
+    }
 }
 
 run {
-    Game.boardSize = 8
-    validInit[Game.initialState]
+    Game.boardSize = 4
     all b: Board | validBoard[b]
-} for exactly 2 Player, 3 Tile, 1 Board, 1 GameState, 1 Game, 5 Int
+    traces
+}   for exactly 2 Player, exactly 3 Tile, exactly 1 Board, exactly 1 GameState, exactly 1 Game, exactly 4 Int
+    for {next is linear}
