@@ -111,14 +111,22 @@ pred isBetweenVertical[startRow: Int, startCol: Int, endRow: Int, endCol: Int, r
     isBetweenBoundaries[startRow, endRow, row]
 }
 
-// NOTE: Consider using a different diagonal calculation approach
+// This function calculates the absolute difference between two integers
+// Credit to Lab for this function.
+fun absDifference(m: Int, n: Int): Int {
+  let difference = subtract[m, n] {
+    difference > 0 => difference else subtract[0, difference]
+  }
+}
+
 pred onDiagonal[row1: Int, col1: Int, row2: Int, col2: Int] {
-    some offset: Int | {
-        (add[row1, offset] = row2 and add[col1, offset] = col2) or
-        (add[row1, offset] = row2 and subtract[col1, offset] = col2) or
-        (subtract[row1, offset] = row2 and add[col1, offset] = col2) or
-        (subtract[row1, offset] = row2 and subtract[col1, offset] = col2)
-    }
+    // some offset: Int | {
+    //     (add[row1, offset] = row2 and add[col1, offset] = col2) or
+    //     (add[row1, offset] = row2 and subtract[col1, offset] = col2) or
+    //     (subtract[row1, offset] = row2 and add[col1, offset] = col2) or
+    //     (subtract[row1, offset] = row2 and subtract[col1, offset] = col2)
+    // }
+    absDifference[row1, row2] != absDifference[col1, col2]
 }
 
 pred isBetweenDiagonal[startRow: Int, startCol: Int, endRow: Int, endCol: Int, row: Int, col: Int] {
@@ -144,22 +152,6 @@ fun playerToPiece(p: Player): Tile {
 fun oppositePlayer(p: Player): Player {
     {p = Black => White else Black}
 }
-
-
-// pred [p: Player, s: GameState, startRow: Int, startCol: Int, endRow: Int, endCol: Int] {
-//     // The below checks that this move will flip some of the opponent's pieces.
-//     // Given startRow, startCol, is there a continuous string of the other player's pieces
-//     // "between" one of p's pieces and (row, col)
-
-//         // The player p already has a piece at this position
-//         s.board.contents[endRow][endCol] = playerToPiece[p]
-
-//         // For everything between (startRow, startCol) and (endRow, endCol)
-//         all betweenRow, betweenCol: Int | isBetween[startRow, startCol, endRow, endCol, betweenRow, betweenCol] implies {
-//             // The opponent has a piece there
-//             s.board.contents[betweenRow][betweenCol] = playerToPiece[oppositePlayer[p]]
-//         }
-// }
 
 pred isValidMove[p: Player, s: GameState, startRow: Int, startCol: Int] {
     // Moving onto an empty tile
