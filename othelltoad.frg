@@ -1,4 +1,4 @@
-#lang forge/bsl
+#lang forge
 
 // Two players: Black and White
 abstract sig Player {}
@@ -11,19 +11,20 @@ one sig Black, White extends Player {}
 abstract sig Tile {}
 one sig BlackPiece, WhitePiece, Empty extends Tile {}
 
-sig Board {
-    contents: pfunc Int -> Int -> Tile 
-}
+// sig Board {
+//     contents: pfunc Int -> Int -> Tile 
+// }
 
 sig GameState {
     turn: one Player,
-    board: one Board
+    board: pfunc Int -> Int -> Tile
 }
 
 one sig Game {
     initialState: one GameState,
     boardSize: one Int,
-    next: pfunc GameState -> GameState
+    next: pfunc GameState -> GameState,
+    indexes: set Int
 }
 
 // Determines if an index is within the bounds of the board (not negative
@@ -33,14 +34,14 @@ pred validIndex[index: Int] {
 }
 
 // Determines if a board is valid based on the pieces that are in its contents.
-pred validBoard[b: Board] {
-    all row, col: Int | {
+pred validBoard[s: GameState] {
+    all row, col: Game.indexes | {
         (validIndex[row] and validIndex[col]) implies {
             // Within the valid range of the board, there must be a Tile
-            some b.contents[row][col]
+            some s.board[row][col]
         } else {
             // Outside the board (negative indices or out of bounds), no Tiles
-            no b.contents[row][col]
+            no s.board[row][col]
         }
     }
 }
@@ -53,13 +54,13 @@ pred validInit[init: GameState] {
             init.turn = Black
 
             // The middle 2x2 of the board has the starting pattern
-            init.board.contents[halfBoardMinusOne][halfBoardMinusOne] = WhitePiece
-            init.board.contents[halfBoardMinusOne][halfBoard] = BlackPiece
-            init.board.contents[halfBoard][halfBoardMinusOne] = BlackPiece
-            init.board.contents[halfBoard][halfBoard] = WhitePiece
+            init.board[halfBoardMinusOne][halfBoardMinusOne] = WhitePiece
+            init.board[halfBoardMinusOne][halfBoard] = BlackPiece
+            init.board[halfBoard][halfBoardMinusOne] = BlackPiece
+            init.board[halfBoard][halfBoard] = WhitePiece
 
             // Every other cell on the board is empty
-            all row, col: Int | {
+            all row, col: Game.indexes | {
                 (validIndex[row] and validIndex[col]) implies {
                     not (
                         (row = halfBoard && col = halfBoard) or
@@ -67,7 +68,7 @@ pred validInit[init: GameState] {
                         (row = halfBoardMinusOne && col = halfBoardMinusOne) or
                         (row = halfBoard && col = halfBoardMinusOne)
                     ) implies {
-                        init.board.contents[row][col] = Empty
+                        init.board[row][col] = Empty
                     }
                 }
             }
@@ -81,15 +82,15 @@ pred morePieces[s: GameState, p: Player] {
     let opponentPiece = {p = Black => WhitePiece else BlackPiece} | 
 
     // The player has more pieces on the board than their opponent
-    #{row, col: Int | s.board.contents[row][col] = playerPiece} 
+    #{row, col: Int | s.board[row][col] = playerPiece} 
     > 
-    #{row, col: Int | s.board.contents[row][col] = opponentPiece}
+    #{row, col: Int | s.board[row][col] = opponentPiece}
 }
 
 pred tie[s: GameState] {
-    #{row, col: Int | s.board.contents[row][col] = BlackPiece}
+    #{row, col: Int | s.board[row][col] = BlackPiece}
     =
-    #{row, col: Int | s.board.contents[row][col] = WhitePiece}
+    #{row, col: Int | s.board[row][col] = WhitePiece}
 }
 
 pred isBetweenBoundaries[bound1: Int, bound2: Int, position: Int] {
@@ -155,7 +156,7 @@ fun oppositePlayer(p: Player): Player {
 
 pred isValidMove[p: Player, s: GameState, startRow: Int, startCol: Int] {
     // Moving onto an empty tile
-    s.board.contents[startRow][startCol] = Empty
+    s.board[startRow][startCol] = Empty
 
     // Both row and column are valid indices
     validIndex[startRow] and validIndex[startCol]
@@ -163,23 +164,25 @@ pred isValidMove[p: Player, s: GameState, startRow: Int, startCol: Int] {
     // The below checks that this move will flip some of the opponent's pieces.
     // Given startRow, startCol, is there a continuous string of the other player's pieces
     // "between" one of p's pieces and (row, col)
-    some endRow, endCol: Int | {
+    some endRow, endCol: Game.indexes | {
         validIndex[endRow] and validIndex[endCol]
 
         // The player p already has a piece at this position
-        s.board.contents[endRow][endCol] = playerToPiece[p]
+        s.board[endRow][endCol] = playerToPiece[p]
 
-        // TODO: This is an efficiency bottleneck
         // For everything between (startRow, startCol) and (endRow, endCol)
-        all betweenRow, betweenCol: Int | isBetween[startRow, startCol, endRow, endCol, betweenRow, betweenCol] implies {
+        all betweenRow, betweenCol: Game.indexes | {
+            validIndex[betweenRow] and validIndex[betweenCol]
+            isBetween[startRow, startCol, endRow, endCol, betweenRow, betweenCol]
+            } implies {
             // The opponent has a piece there
-            s.board.contents[betweenRow][betweenCol] = playerToPiece[oppositePlayer[p]]
+            s.board[betweenRow][betweenCol] = playerToPiece[oppositePlayer[p]]
         }
     }
 }
 
 pred canMove[p: Player, s: GameState] {
-    some row, col: Int | isValidMove[p, s, row, col]
+    some row, col: Game.indexes | isValidMove[p, s, row, col]
 }
 
 pred validFinal[s: GameState] {
@@ -187,46 +190,52 @@ pred validFinal[s: GameState] {
 }
 
 pred validTransition[pre: GameState, post: GameState] {
-
     // The turns have swapped from pre to post
     post.turn = oppositePlayer[pre.turn]
 
-    ((some startRow, startCol: Int | {
-        // Moving onto an empty tile
-        pre.board.contents[startRow][startCol] = Empty
+    canMove[pre.turn, pre] implies {
+        some startRow, startCol: Game.indexes | {
+            // Moving onto an empty tile
+            pre.board[startRow][startCol] = Empty
 
-        // Both row and column are valid indices
-        validIndex[startRow] and validIndex[startCol]
+            // Both row and column are valid indices
+            validIndex[startRow] and validIndex[startCol]
 
-        // The below checks that this move will flip some of the opponent's pieces.
-        // Given startRow, startCol, is there a continuous string of the other player's pieces
-        // "between" one of p's pieces and (row, col)
-        some endRow, endCol: Int | {
-            // The player p already has a piece at this position
-            pre.board.contents[endRow][endCol] = playerToPiece[pre.turn]
+            // The below checks that this move will flip some of the opponent's pieces.
+            // Given startRow, startCol, is there a continuous string of the other player's pieces
+            // "between" one of p's pieces and (row, col)
+            some endRow, endCol: Game.indexes | {
+                validIndex[endRow] and validIndex[endCol]
 
-            // For everything between (startRow, startCol) and (endRow, endCol)
-            all betweenRow, betweenCol: Int | isBetween[startRow, startCol, endRow, endCol, betweenRow, betweenCol] implies {
-                // The opponent has a piece there
-                pre.board.contents[betweenRow][betweenCol] = playerToPiece[oppositePlayer[pre.turn]]
+                // The player p already has a piece at this position
+                pre.board[endRow][endCol] = playerToPiece[pre.turn]
+
+                // For everything between (startRow, startCol) and (endRow, endCol)
+                all betweenRow, betweenCol: Game.indexes | {
+                    validIndex[betweenRow] and validIndex[betweenCol]
+                    isBetween[startRow, startCol, endRow, endCol, betweenRow, betweenCol]
+                    } implies {
+                    // The opponent has a piece there
+                    pre.board[betweenRow][betweenCol] = playerToPiece[oppositePlayer[pre.turn]]
+                }
             }
+
+            // The player whose turn it was put down their piece at (row, col)
+            post.board[startRow][startCol] = playerToPiece[pre.turn]
+
+            // Flipping of opponent's pieces has occurred where appropriate
+            correctFlipping[pre, post, startRow, startCol]
         }
-
-        // The player whose turn it was put down their piece at (row, col)
-        post.board.contents[startRow][startCol] = playerToPiece[pre.turn]
-
-        // Flipping of opponent's pieces has occurred where appropriate
-        correctFlipping[pre, post, startRow, startCol]
-    })
-    or 
-    skip[pre, post])
+    } else {
+        skip[pre, post]
+    }
 }
 
 pred skip[pre: GameState, post: GameState] {
     // Everything else about the board stays the same
-    all row, col: Int | {
+    all row, col: Game.indexes | {
         (validIndex[row] and validIndex[col]) implies {
-            pre.board.contents[row][col] = post.board.contents[row][col]
+            pre.board[row][col] = post.board[row][col]
         }
     }
 
@@ -235,30 +244,35 @@ pred skip[pre: GameState, post: GameState] {
 }
 
 pred correctFlipping[pre: GameState, post: GameState, moveRow: Int, moveCol: Int] {
-    all row, col: Int | (validIndex[row] and validIndex[col]) implies {
-
+    all row, col: Game.indexes | (validIndex[row] and validIndex[col]) implies {
         // There is some other position where the player whose turn it is moved
-        some endRow, endCol: Int | {
+        some endRow, endCol: Game.indexes | {
             (endRow != moveRow) or (endCol != moveCol)
             validIndex[endRow] 
             validIndex[endCol] 
-            pre.board.contents[endRow][endCol] = playerToPiece[pre.turn] 
+            pre.board[endRow][endCol] = playerToPiece[pre.turn] 
 
-            // Everything between the move position and this position is the oppoent's pieces
-            all betweenRow, betweenCol: Int | {
-                isBetween[moveRow, moveCol, endRow, endCol, betweenRow, betweenCol] implies
-                pre.board.contents[betweenRow][betweenCol] = playerToPiece[oppositePlayer[pre.turn]]
-            }
+            // TODO: Debugging UNSAT with correctFlipping if this is uncommented, 
+            // and incorrect flipping when it is commented.
+
+            // Everything between the move position and this position is the opponent's pieces
+            // all betweenRow, betweenCol: Game.indexes | {
+            //     {
+            //         validIndex[betweenRow] and validIndex[betweenCol]
+            //         isBetween[moveRow, moveCol, endRow, endCol, betweenRow, betweenCol]
+            //      } implies
+            //     pre.board[betweenRow][betweenCol] = playerToPiece[oppositePlayer[pre.turn]]
+            // }
 
             // (row, col) is contained within the outflanked section
             isBetween[moveRow, moveCol, endRow, endCol, row, col]
         }
         implies {
             // The piece has flipped
-            post.board.contents[row][col] = playerToPiece[pre.turn]
+            post.board[row][col] = playerToPiece[pre.turn]
         } else {
             // The piece has stayed the same
-            post.board.contents[row][col] = pre.board.contents[row][col]
+            post.board[row][col] = pre.board[row][col]
         }
     }
 }
@@ -288,19 +302,59 @@ pred correctFlipping[pre: GameState, post: GameState, moveRow: Int, moveCol: Int
 pred traces {
     validInit[Game.initialState]
 
+    // No state comes before the initial state
+    no pre: GameState | Game.next[pre] = Game.initialState
+
     all s: GameState | some Game.next[s] implies {
         validTransition[s, Game.next[s]]
     }
 }
 
+
+// This restricts the contents field to use only 0-3 Ints
+inst optimizer_size4_1board {
+    GameState = `GameState0
+    BlackPiece = `BlackPiece
+    WhitePiece = `WhitePiece
+    Empty = `Empty
+    Tile = BlackPiece + WhitePiece + Empty
+
+    board in GameState -> (0 + 1 + 2 + 3) -> (0 + 1 + 2 + 3) -> Tile
+
+    Game = `Game0
+    boardSize = `Game0 -> 4
+
+    indexes = `Game0 -> (0 + 1 + 2 + 3)
+}
+
+inst optimizer_size4_2board {
+    GameState = `GameState0 + `GameState1
+    BlackPiece = `BlackPiece
+    WhitePiece = `WhitePiece
+    Empty = `Empty
+    Tile = BlackPiece + WhitePiece + Empty
+
+    board in GameState -> (0 + 1 + 2 + 3) -> (0 + 1 + 2 + 3) -> Tile
+
+    Game = `Game0
+    boardSize = `Game0 -> 4
+
+    indexes = `Game0 -> (0 + 1 + 2 + 3)
+}
+
 run {
     Game.boardSize = 4
-    all b: Board | validBoard[b]
+    all s: GameState | validBoard[s]
     traces
-}   for exactly 2 Player, exactly 3 Tile, exactly 1 Board, exactly 1 GameState, exactly 1 Game, exactly 4 Int
-    for {next is linear}
+} for exactly 2 Player, exactly 3 Tile, exactly 2 GameState, exactly 1 Game, exactly 4 Int
+for {
+    optimizer_size4_2board
+    next is linear
+}
 
-
+option skolem_depth 2
+option sb 2000
+option verbose 5
 
 // For debugging info:
 // option verbose 5
