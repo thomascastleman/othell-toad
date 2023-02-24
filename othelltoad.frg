@@ -164,6 +164,8 @@ pred isValidMove[p: Player, s: GameState, startRow: Int, startCol: Int] {
     // Given startRow, startCol, is there a continuous string of the other player's pieces
     // "between" one of p's pieces and (row, col)
     some endRow, endCol: Int | {
+        validIndex[endRow] and validIndex[endCol]
+
         // The player p already has a piece at this position
         s.board.contents[endRow][endCol] = playerToPiece[p]
 
@@ -298,4 +300,27 @@ run {
 }   for exactly 2 Player, exactly 3 Tile, exactly 1 Board, exactly 1 GameState, exactly 1 Game, exactly 4 Int
     for {next is linear}
 
-// 4294967296
+
+
+// For debugging info:
+// option verbose 5
+
+// The 4 billion figure shouldn't be a prob for Forge
+
+// Guards for valid indices not present for endRow/endCol in isValidMove
+// and also for betweenRow and betweenCol
+
+
+// use inst with 
+//      contents in Board -> (0 1 2 3 4) -> (0 1 2 3 4) -> Tile
+// 
+
+// Fixing the board size may allow some optimizations
+
+// Because we are counting pieces, our Int size needs to be big enough to accommodate that
+
+// Other options to try:
+// option skolem_depth 2
+// option sb 2000
+
+// NOTE: We're not actually using morePieces or tie anywhere right now
