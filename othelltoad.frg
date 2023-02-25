@@ -94,8 +94,8 @@ pred tie[s: GameState] {
 }
 
 pred isBetweenBoundaries[bound1: Int, bound2: Int, position: Int] {
-    (bound1 <= position and position <= bound2) or 
-    (bound2 <= position and position <= bound1)
+    (bound1 < position and position < bound2) or 
+    (bound2 < position and position < bound1)
 }
 
 pred isBetweenHorizontal[startRow: Int, startCol: Int, endRow: Int, endCol: Int, row: Int, col: Int] {
@@ -205,18 +205,28 @@ pred validTransition[pre: GameState, post: GameState] {
             // Given startRow, startCol, is there a continuous string of the other player's pieces
             // "between" one of p's pieces and (row, col)
             some endRow, endCol: Game.indexes | {
+                (endRow != startRow or endCol != startCol)
                 validIndex[endRow] and validIndex[endCol]
 
                 // The player p already has a piece at this position
                 pre.board[endRow][endCol] = playerToPiece[pre.turn]
 
-                // For everything between (startRow, startCol) and (endRow, endCol)
-                all betweenRow, betweenCol: Game.indexes | {
+                // There is at least ONE tile that will be flipped by this move
+                some betweenRow, betweenCol: Game.indexes | {
                     validIndex[betweenRow] and validIndex[betweenCol]
                     isBetween[startRow, startCol, endRow, endCol, betweenRow, betweenCol]
-                    } implies {
-                    // The opponent has a piece there
                     pre.board[betweenRow][betweenCol] = playerToPiece[oppositePlayer[pre.turn]]
+                }
+
+                // For everything between (startRow, startCol) and (endRow, endCol)
+                all betweenRow, betweenCol: Game.indexes | {
+                    {
+                        validIndex[betweenRow] and validIndex[betweenCol]
+                        isBetween[startRow, startCol, endRow, endCol, betweenRow, betweenCol]
+                    } implies {
+                        // The opponent has a piece there
+                        pre.board[betweenRow][betweenCol] = playerToPiece[oppositePlayer[pre.turn]]
+                    }
                 }
             }
 
@@ -244,29 +254,29 @@ pred skip[pre: GameState, post: GameState] {
 }
 
 pred correctFlipping[pre: GameState, post: GameState, moveRow: Int, moveCol: Int] {
-    all row, col: Game.indexes | (validIndex[row] and validIndex[col]) implies {
+    // All tiles either flip from one piece to the other, or stay the same - except for
+    // the move position, which goes from empty to a tile.
+    all row, col: Game.indexes | (validIndex[row] and validIndex[col] and (row != moveRow or col != moveCol)) implies {
         // There is some other position where the player whose turn it is moved
-        some endRow, endCol: Game.indexes | {
+        (some endRow, endCol: Game.indexes | {
             (endRow != moveRow) or (endCol != moveCol)
             validIndex[endRow] 
             validIndex[endCol] 
             pre.board[endRow][endCol] = playerToPiece[pre.turn] 
 
-            // TODO: Debugging UNSAT with correctFlipping if this is uncommented, 
-            // and incorrect flipping when it is commented.
-
             // Everything between the move position and this position is the opponent's pieces
-            // all betweenRow, betweenCol: Game.indexes | {
-            //     {
-            //         validIndex[betweenRow] and validIndex[betweenCol]
-            //         isBetween[moveRow, moveCol, endRow, endCol, betweenRow, betweenCol]
-            //      } implies
-            //     pre.board[betweenRow][betweenCol] = playerToPiece[oppositePlayer[pre.turn]]
-            // }
+            all betweenRow, betweenCol: Game.indexes | {
+                {
+                    validIndex[betweenRow] and validIndex[betweenCol]
+                    isBetween[moveRow, moveCol, endRow, endCol, betweenRow, betweenCol]
+                 } implies {
+                    pre.board[betweenRow][betweenCol] = playerToPiece[oppositePlayer[pre.turn]]
+                 }
+            }
 
             // (row, col) is contained within the outflanked section
             isBetween[moveRow, moveCol, endRow, endCol, row, col]
-        }
+        })
         implies {
             // The piece has flipped
             post.board[row][col] = playerToPiece[pre.turn]
@@ -276,28 +286,6 @@ pred correctFlipping[pre: GameState, post: GameState, moveRow: Int, moveCol: Int
         }
     }
 }
-
-
-// pred move[pre: GameState, post: GameState, row: Int, col: Int] {
-//     // == Guard - stuff true about pre == 
-
-//     // The game is not already over in the pre state
-//     // not validFinal[pre]
-
-//     // Moving at (row, col) will capture some of the opponent's pieces and be valid
-//     //isValidMove[pre.turn, pre, row, col]
-    
-//     // == Action - what does the post-state look like == 
-
-//     // // The turns have swapped from pre to post
-//     // post.turn = oppositePlayer[pre.turn]
-
-//     // // The player whose turn it was put down their piece at (row, col)
-//     // post.board.contents[row][col] = {pre.turn = Black => BlackPiece else WhitePiece}
-
-//     // // Flipping of opponent's pieces has occurred where appropriate
-//     // correctFlipping[pre, post, row, col]
-// }
 
 pred traces {
     validInit[Game.initialState]
