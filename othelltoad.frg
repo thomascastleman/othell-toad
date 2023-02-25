@@ -35,7 +35,7 @@ pred validIndex[index: Int] {
 
 // Determines if a board is valid based on the pieces that are in its contents.
 pred validBoard[s: GameState] {
-    all row, col: Game.indexes | {
+    all row, col: Int | {
         (validIndex[row] and validIndex[col]) implies {
             // Within the valid range of the board, there must be a Tile
             some s.board[row][col]
@@ -121,13 +121,7 @@ fun absDifference(m: Int, n: Int): Int {
 }
 
 pred onDiagonal[row1: Int, col1: Int, row2: Int, col2: Int] {
-    // some offset: Int | {
-    //     (add[row1, offset] = row2 and add[col1, offset] = col2) or
-    //     (add[row1, offset] = row2 and subtract[col1, offset] = col2) or
-    //     (subtract[row1, offset] = row2 and add[col1, offset] = col2) or
-    //     (subtract[row1, offset] = row2 and subtract[col1, offset] = col2)
-    // }
-    absDifference[row1, row2] != absDifference[col1, col2]
+    absDifference[row1, row2] = absDifference[col1, col2]
 }
 
 pred isBetweenDiagonal[startRow: Int, startCol: Int, endRow: Int, endCol: Int, row: Int, col: Int] {
@@ -330,13 +324,39 @@ inst optimizer_size4_2board {
     indexes = `Game0 -> (0 + 1 + 2 + 3)
 }
 
+inst optimizer_size4_3board {
+    // GameState = `GameState0 + `GameState1 + `GameState2
+    BlackPiece = `BlackPiece
+    WhitePiece = `WhitePiece
+    Empty = `Empty
+    Tile = BlackPiece + WhitePiece + Empty
+
+    // board in GameState -> (0 + 1 + 2 + 3) -> (0 + 1 + 2 + 3) -> Tile
+
+    Game = `Game0
+    boardSize = `Game0 -> 4
+
+    indexes = `Game0 -> (0 + 1 + 2 + 3)
+}
+
+// Can White win on a 4x4 board?
+// Yes
 run {
     Game.boardSize = 4
     all s: GameState | validBoard[s]
     traces
-} for exactly 2 Player, exactly 3 Tile, exactly 2 GameState, exactly 1 Game, exactly 4 Int
+    
+    some final: GameState | {
+        // It is the last state
+        no Game.next[final]
+
+        // White has more pieces in the final state (they won)
+        morePieces[final, White]
+    }
+
+} for exactly 2 Player, exactly 3 Tile, 13 GameState, exactly 1 Game, exactly 5 Int
 for {
-    optimizer_size4_2board
+    optimizer_size4_3board
     next is linear
 }
 
