@@ -1,42 +1,53 @@
-
-const BOARD_SIZE = 4;
-
 const d3 = require('d3')
 d3.selectAll("svg > *").remove();
 
-function printValue(row, col, yoffset, value) {
-  d3.select(svg)
-    .append("text")
-    .style("fill", "black")
-    .attr("x", (row+1)*10)
-    .attr("y", (col+1)*14 + yoffset)
-    .text(value);
+const BOARD_SIZE = 4;
+
+function showPiece(color, row, col, xoffset, yoffset) {
+    d3.select(svg)
+        .append('rect')
+        .attr("x", (row+1)*16 + xoffset)
+        .attr("y", (col+1)*16 + yoffset)
+        .attr('width', 16)
+        .attr('height', 16)
+        .attr('stroke-width', 1)
+        .attr('stroke', 'black')
+        .attr('fill', color);
 }
 
-function printState(stateAtom, yoffset) {
+function printValue(row, col, xoffset, yoffset, value) {
+    console.log(value);
+    if (value == "WhitePiece0") {
+        showPiece("white", row, col, xoffset, yoffset);
+    } else if (value == "BlackPiece0") {
+        showPiece("black", row, col, xoffset, yoffset);
+    } else if (value == "Empty0") {
+        showPiece("#00b33c", row, col, xoffset, yoffset);
+    }
+
+}
+
+function printState(stateAtom, xoffset, yoffset) {
   for (r = 0; r < BOARD_SIZE; r++) {
     for (c = 0; c < BOARD_SIZE; c++) {
-      printValue(r, c, yoffset,
+      printValue(r, c, xoffset, yoffset,
                  stateAtom.board[r][c]
-                 .toString());
+                 .toString())  
     }
   }
-  
-  d3.select(svg)
-    .append('rect')
-    .attr('x', 5)
-    .attr('y', yoffset+1)
-    .attr('width', 40)
-    .attr('height', 50)
-    .attr('stroke-width', 2)
-    .attr('stroke', 'black')
-    .attr('fill', 'transparent');
 }
 
 
-var offset = 0
-for(b = 0; b <= 1; b++) {  
-  if(GameState.atom("GameState"+b) != null)
-    printState(GameState.atom("GameState"+b), offset)  
-  offset = offset + 55
+var yoffset = 0;
+var xoffset = 0;
+
+for(b = 0; b < 13; b++) {  
+  if(GameState.atom("GameState"+b) != null) {
+    printState(GameState.atom("GameState"+b), xoffset, yoffset);
+  }
+  yoffset = yoffset + 80
+  if (b % 4 == 0) {
+      xoffset = xoffset + 80;
+      yoffset = 0;
+  }
 }

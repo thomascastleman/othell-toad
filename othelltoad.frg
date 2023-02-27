@@ -292,13 +292,22 @@ pred traces {
     }
 }
 
+pred winning[p: Player] {
+    some final: GameState | {
+        // It is the last state
+        no Game.next[final]
+
+        // Player p has more pieces in the final state (they won)
+        morePieces[final, p]
+    }
+}
 
 // This restricts the contents field to use only 0-3 Ints
 inst optimizer_size4_1board {
     GameState = `GameState0
-    BlackPiece = `BlackPiece
-    WhitePiece = `WhitePiece
-    Empty = `Empty
+    BlackPiece = `BlackPiece0
+    WhitePiece = `WhitePiece0
+    Empty = `Empty0
     Tile = BlackPiece + WhitePiece + Empty
 
     board in GameState -> (0 + 1 + 2 + 3) -> (0 + 1 + 2 + 3) -> Tile
@@ -311,9 +320,9 @@ inst optimizer_size4_1board {
 
 inst optimizer_size4_2board {
     GameState = `GameState0 + `GameState1
-    BlackPiece = `BlackPiece
-    WhitePiece = `WhitePiece
-    Empty = `Empty
+    BlackPiece = `BlackPiece0
+    WhitePiece = `WhitePiece0
+    Empty = `Empty0
     Tile = BlackPiece + WhitePiece + Empty
 
     board in GameState -> (0 + 1 + 2 + 3) -> (0 + 1 + 2 + 3) -> Tile
@@ -326,9 +335,9 @@ inst optimizer_size4_2board {
 
 inst optimizer_size4_3board {
     // GameState = `GameState0 + `GameState1 + `GameState2
-    BlackPiece = `BlackPiece
-    WhitePiece = `WhitePiece
-    Empty = `Empty
+    BlackPiece = `BlackPiece0
+    WhitePiece = `WhitePiece0
+    Empty = `Empty0
     Tile = BlackPiece + WhitePiece + Empty
 
     // board in GameState -> (0 + 1 + 2 + 3) -> (0 + 1 + 2 + 3) -> Tile
@@ -339,30 +348,44 @@ inst optimizer_size4_3board {
     indexes = `Game0 -> (0 + 1 + 2 + 3)
 }
 
-// Can White win on a 4x4 board?
-// Yes
+// Can White win on a 4x4 board? Yes
+// run {
+//     Game.boardSize = 4
+//     all s: GameState | validBoard[s]
+//     traces
+//     winning[White]
+// } for exactly 2 Player, exactly 3 Tile, exactly 13 GameState, exactly 1 Game, exactly 5 Int
+// for {
+//     optimizer_size4_3board
+//     next is linear
+// }
+
+// Can Black win by eliminating all of the White pieces? No, this is unsat
 run {
     Game.boardSize = 4
     all s: GameState | validBoard[s]
     traces
-    
-    some final: GameState | {
-        // It is the last state
-        no Game.next[final]
 
-        // White has more pieces in the final state (they won)
-        morePieces[final, White]
+    some s: GameState |  { 
+        // This state is final
+        no Game.next[s]
+
+        // All of the tiles are Black or empty
+        all row, col: Game.indexes | {
+            validIndex[row]
+            validIndex[col]
+            (s.board[row][col] = playerToPiece[Black]) or (s.board[row][col] = Empty)
+        }
     }
-
 } for exactly 2 Player, exactly 3 Tile, 13 GameState, exactly 1 Game, exactly 5 Int
 for {
     optimizer_size4_3board
     next is linear
 }
 
-option skolem_depth 2
-option sb 2000
-option verbose 5
+// option skolem_depth 2
+// option sb 2000
+// option verbose 5
 
 // For debugging info:
 // option verbose 5
