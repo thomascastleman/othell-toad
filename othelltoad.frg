@@ -11,10 +11,6 @@ one sig Black, White extends Player {}
 abstract sig Tile {}
 one sig BlackPiece, WhitePiece, Empty extends Tile {}
 
-// sig Board {
-//     contents: pfunc Int -> Int -> Tile 
-// }
-
 sig GameState {
     turn: one Player,
     board: pfunc Int -> Int -> Tile
@@ -48,6 +44,10 @@ pred validBoard[s: GameState] {
 
 // Determines if the given Game has a valid initial state.
 pred validInit[init: GameState] {
+    // No state comes before this one
+    no pre: GameState | Game.next[pre] = init
+    
+    // The board configuration is valid
     let halfBoard = divide[Game.boardSize, 2] | {
         let halfBoardMinusOne = subtract[halfBoard, 1] | {
             // Black always moves first
@@ -76,28 +76,30 @@ pred validInit[init: GameState] {
     }
 }
 
+// Counts how many pieces the given player has on the board of this state.
+fun countPieces(s: GameState, p: Player): Int {
+    #{row, col: Game.indexes | s.board[row][col] = playerToPiece[p]} 
+}
+
 // This determines if player p has more pieces than their opponent in the given state.
 pred morePieces[s: GameState, p: Player] {
-    let playerPiece = {p = Black => BlackPiece else WhitePiece} |
-    let opponentPiece = {p = Black => WhitePiece else BlackPiece} | 
-
-    // The player has more pieces on the board than their opponent
-    #{row, col: Int | s.board[row][col] = playerPiece} 
-    > 
-    #{row, col: Int | s.board[row][col] = opponentPiece}
+    countPieces[s, p] > countPieces[s, oppositePlayer[p]]
 }
 
+// Determines if the given game state represents a tie (same number of pieces for both players).
 pred tie[s: GameState] {
-    #{row, col: Int | s.board[row][col] = BlackPiece}
-    =
-    #{row, col: Int | s.board[row][col] = WhitePiece}
+    countPieces[s, White] = countPieces[s, Black]
 }
 
+// Checks if the given position is between (exclusive) the given bounds,
+// regardless of the ordering of the bounds (bound1 < bound2 or bound2 < bound1).
 pred isBetweenBoundaries[bound1: Int, bound2: Int, position: Int] {
     (bound1 < position and position < bound2) or 
     (bound2 < position and position < bound1)
 }
 
+// Checks if the given (row, col) is between (startRow, startCol) and (endRow, endCol)
+// along a row (horizontally).
 pred isBetweenHorizontal[startRow: Int, startCol: Int, endRow: Int, endCol: Int, row: Int, col: Int] {
     // All the rows are the same
     startRow = endRow and row = startRow
@@ -105,6 +107,8 @@ pred isBetweenHorizontal[startRow: Int, startCol: Int, endRow: Int, endCol: Int,
     isBetweenBoundaries[startCol, endCol, col]
 }
 
+// Checks if the given (row, col) is between (startRow, startCol) and (endRow, endCol)
+// along a column (vertically).
 pred isBetweenVertical[startRow: Int, startCol: Int, endRow: Int, endCol: Int, row: Int, col: Int] {
     // All columns are the same 
     startCol = endCol and col = startCol 
@@ -112,18 +116,20 @@ pred isBetweenVertical[startRow: Int, startCol: Int, endRow: Int, endCol: Int, r
     isBetweenBoundaries[startRow, endRow, row]
 }
 
-// This function calculates the absolute difference between two integers
-// Credit to Lab for this function.
+// This function calculates the absolute difference between two integers.
+// Credit to N-Queens lab for this function.
 fun absDifference(m: Int, n: Int): Int {
   let difference = subtract[m, n] {
     difference > 0 => difference else subtract[0, difference]
   }
 }
 
+// Checks if (row1, col1) and (row2, col2) are on the same diagonal.
 pred onDiagonal[row1: Int, col1: Int, row2: Int, col2: Int] {
     absDifference[row1, row2] = absDifference[col1, col2]
 }
 
+// Checks if (row, col) is between (startRow, startCol) and (endRow, endCol) diagonally.
 pred isBetweenDiagonal[startRow: Int, startCol: Int, endRow: Int, endCol: Int, row: Int, col: Int] {
     isBetweenBoundaries[startRow, endRow, row] and isBetweenBoundaries[startCol, endCol, col]
 
@@ -140,14 +146,18 @@ pred isBetween[startRow: Int, startCol: Int, endRow: Int, endCol: Int, row: Int,
     isBetweenDiagonal[startRow, startCol, endRow, endCol, row, col]
 }
 
+// Converts a player to their piece.
 fun playerToPiece(p: Player): Tile {
     {p = Black => BlackPiece else WhitePiece}
 }
 
+// Converts a player to their opponent
 fun oppositePlayer(p: Player): Player {
     {p = Black => White else Black}
 }
 
+// Checks if moving at (startRow, startCol) is valid for player p in this game state.
+// A valid move must flip at least one of the opponent's pieces.
 pred isValidMove[p: Player, s: GameState, startRow: Int, startCol: Int] {
     // Moving onto an empty tile
     s.board[startRow][startCol] = Empty
@@ -166,23 +176,31 @@ pred isValidMove[p: Player, s: GameState, startRow: Int, startCol: Int] {
 
         // For everything between (startRow, startCol) and (endRow, endCol)
         all betweenRow, betweenCol: Game.indexes | {
-            validIndex[betweenRow] and validIndex[betweenCol]
-            isBetween[startRow, startCol, endRow, endCol, betweenRow, betweenCol]
+            {
+                validIndex[betweenRow] and validIndex[betweenCol]
+                isBetween[startRow, startCol, endRow, endCol, betweenRow, betweenCol]
             } implies {
-            // The opponent has a piece there
-            s.board[betweenRow][betweenCol] = playerToPiece[oppositePlayer[p]]
+                // The opponent has a piece there
+                s.board[betweenRow][betweenCol] = playerToPiece[oppositePlayer[p]]
+            }
         }
     }
 }
 
+// Determines if the given player can make any valid move from the given game state.
 pred canMove[p: Player, s: GameState] {
     some row, col: Game.indexes | isValidMove[p, s, row, col]
 }
 
+// Determines if this game state is a final state.
 pred validFinal[s: GameState] {
+    // Neither player can move
     no p: Player | canMove[p, s]
+    // This state has no successor in the trace
+    no Game.next[s]
 }
 
+// Checks if a transition from the pre state to the post state abides by the rules of Othello.
 pred validTransition[pre: GameState, post: GameState] {
     // The turns have swapped from pre to post
     post.turn = oppositePlayer[pre.turn]
@@ -235,6 +253,8 @@ pred validTransition[pre: GameState, post: GameState] {
     }
 }
 
+// Determines if the transition from the pre state to the post state indicates
+// a valid situation where a player's turn was skipped because they could not make a move.
 pred skip[pre: GameState, post: GameState] {
     // Everything else about the board stays the same
     all row, col: Game.indexes | {
@@ -247,6 +267,9 @@ pred skip[pre: GameState, post: GameState] {
     canMove[oppositePlayer[pre.turn], post]
 }
 
+// Checks that, in a transition from pre to post where the player whose turn it is
+// moves at (moveRow, moveCol), all the pieces that need to flip do indeed flip,
+// and all pieces that need to stay the same do so.
 pred correctFlipping[pre: GameState, post: GameState, moveRow: Int, moveCol: Int] {
     // All tiles either flip from one piece to the other, or stay the same - except for
     // the move position, which goes from empty to a tile.
@@ -281,17 +304,30 @@ pred correctFlipping[pre: GameState, post: GameState, moveRow: Int, moveCol: Int
     }
 }
 
+// Checks that this instance constitutes a valid trace of the game. That is,
+// it represents a full playthrough from start to finish, and all transitions
+// between states abide by the rules.
 pred traces {
+    // The initial state is a valid initial state
     validInit[Game.initialState]
 
-    // No state comes before the initial state
-    no pre: GameState | Game.next[pre] = Game.initialState
+    // There is a state which is a valid final state
+    some final: GameState | {
+        validFinal[final]
+    }
 
-    all s: GameState | some Game.next[s] implies {
-        validTransition[s, Game.next[s]]
+    all s: GameState | {
+        // State has a valid board (no crazy out of bounds indices)
+        validBoard[s] 
+
+        // All of the transitions as indicated by Game.next are valid
+        some Game.next[s] implies {
+            validTransition[s, Game.next[s]]
+        }
     }
 }
 
+// Checks if the given player wins in this instance. Assumes traces.
 pred winning[p: Player] {
     some final: GameState | {
         // It is the last state
@@ -302,110 +338,110 @@ pred winning[p: Player] {
     }
 }
 
-// This restricts the contents field to use only 0-3 Ints
-inst optimizer_size4_1board {
-    GameState = `GameState0
+// Determines if the given position is one of the four corners of the board.
+pred isCorner[row: Int, col: Int] {
+    // Corners are (0, 0) (0, maxIndex) (maxIndex, 0) (maxIndex, maxIndex)
+    let maxIndex = subtract[Game.boardSize, 1] | {
+        row = 0 or row = maxIndex
+        col = 0 or col = maxIndex
+    }
+}
+
+// This optimizer restricts Game.indexes to only the Ints that are valid
+// indices into the board. There are several places where we quantify over
+// Game.indexes instead of Int in order to reduce the possibilities Forge has
+// to quantify over.
+inst optimizer_for_4x4_board {
     BlackPiece = `BlackPiece0
     WhitePiece = `WhitePiece0
     Empty = `Empty0
     Tile = BlackPiece + WhitePiece + Empty
 
-    board in GameState -> (0 + 1 + 2 + 3) -> (0 + 1 + 2 + 3) -> Tile
-
     Game = `Game0
     boardSize = `Game0 -> 4
-
     indexes = `Game0 -> (0 + 1 + 2 + 3)
 }
 
-inst optimizer_size4_2board {
-    GameState = `GameState0 + `GameState1
-    BlackPiece = `BlackPiece0
-    WhitePiece = `WhitePiece0
-    Empty = `Empty0
-    Tile = BlackPiece + WhitePiece + Empty
-
-    board in GameState -> (0 + 1 + 2 + 3) -> (0 + 1 + 2 + 3) -> Tile
-
-    Game = `Game0
-    boardSize = `Game0 -> 4
-
-    indexes = `Game0 -> (0 + 1 + 2 + 3)
-}
-
-inst optimizer_size4_3board {
-    // GameState = `GameState0 + `GameState1 + `GameState2
-    BlackPiece = `BlackPiece0
-    WhitePiece = `WhitePiece0
-    Empty = `Empty0
-    Tile = BlackPiece + WhitePiece + Empty
-
-    // board in GameState -> (0 + 1 + 2 + 3) -> (0 + 1 + 2 + 3) -> Tile
-
-    Game = `Game0
-    boardSize = `Game0 -> 4
-
-    indexes = `Game0 -> (0 + 1 + 2 + 3)
-}
+// ======================== Checking Properties ======================== 
 
 // Can White win on a 4x4 board? Yes
 // run {
 //     Game.boardSize = 4
-//     all s: GameState | validBoard[s]
 //     traces
 //     winning[White]
-// } for exactly 2 Player, exactly 3 Tile, exactly 13 GameState, exactly 1 Game, exactly 5 Int
+// } for exactly 2 Player, exactly 3 Tile, 13 GameState, exactly 1 Game, exactly 5 Int
 // for {
-//     optimizer_size4_3board
+//     optimizer_for_4x4_board
 //     next is linear
 // }
 
-// Can Black win by eliminating all of the White pieces? No, this is unsat
-run {
-    Game.boardSize = 4
-    all s: GameState | validBoard[s]
-    traces
+// Can Black win by eliminating all of the White pieces? No, this is unsat.
+// Same for vice versa.
+// run {
+//     Game.boardSize = 4
+//     traces
 
-    some s: GameState |  { 
-        // This state is final
-        no Game.next[s]
+//     some s: GameState |  { 
+//         // This state is final
+//         no Game.next[s]
 
-        // All of the tiles are Black or empty
-        all row, col: Game.indexes | {
-            validIndex[row]
-            validIndex[col]
-            (s.board[row][col] = playerToPiece[Black]) or (s.board[row][col] = Empty)
-        }
-    }
-} for exactly 2 Player, exactly 3 Tile, 13 GameState, exactly 1 Game, exactly 5 Int
-for {
-    optimizer_size4_3board
-    next is linear
-}
+//         // All of the tiles are Black or empty
+//         all row, col: Game.indexes | {
+//             validIndex[row]
+//             validIndex[col]
+//             (s.board[row][col] = playerToPiece[Black]) or (s.board[row][col] = Empty)
+//         }
+//     }
+// } for exactly 2 Player, exactly 3 Tile, 13 GameState, exactly 1 Game, exactly 5 Int
+// for {
+//     optimizer_for_4x4_board
+//     next is linear
+// }
 
-// option skolem_depth 2
-// option sb 2000
-// option verbose 5
+// Can there be a tie on a 4x4 board? Yes. There are several valid instances.
+// run {
+//     Game.boardSize = 4
+//     traces
 
-// For debugging info:
-// option verbose 5
+//     some final: GameState |  { 
+//         no Game.next[final] // This is the final state
+//         tie[final]          // It is a tie
+//     }
+// } for exactly 2 Player, exactly 3 Tile, 13 GameState, exactly 1 Game, exactly 5 Int
+// for {
+//     optimizer_for_4x4_board
+//     next is linear
+// }
 
-// The 4 billion figure shouldn't be a prob for Forge
+// Once you place a piece in a corner, it can never flip.
+// This run attempts to find a trace where one player moves in a corner
+// and then that corner is later flipped.
+// This is unsat, so corner pieces can never be flipped.
+// run {
+//     Game.boardSize = 4
+//     traces
 
-// Guards for valid indices not present for endRow/endCol in isValidMove
-// and also for betweenRow and betweenCol
+//     // Find me a corner
+//     some cornerRow, cornerCol: Int | {
+//         isCorner[cornerRow, cornerCol]
 
+//         some earlierState, laterState: GameState | {
+//             // The later state occurs after the earlier state
+//             reachable[laterState, earlierState, Game.next]
 
-// use inst with 
-//      contents in Board -> (0 1 2 3 4) -> (0 1 2 3 4) -> Tile
-// 
+//             some player: Player | {
+//                 // This player moves at this corner in the earlier state
+//                 earlierState.board[cornerRow][cornerCol] = playerToPiece[player]
 
-// Fixing the board size may allow some optimizations
+//                 // The opponent flips this corner in the later state
+//                 laterState.board[cornerRow][cornerCol] = playerToPiece[oppositePlayer[player]]
+//             }
+//         }
+//     }
+// } for exactly 2 Player, exactly 3 Tile, 13 GameState, exactly 1 Game, exactly 5 Int
+// for {
+//     optimizer_for_4x4_board
+//     next is linear
+// }
 
-// Because we are counting pieces, our Int size needs to be big enough to accommodate that
-
-// Other options to try:
-// option skolem_depth 2
-// option sb 2000
-
-// NOTE: We're not actually using morePieces or tie anywhere right now
+// TODO: If you place your pieces in all four corners, can your opponent win?

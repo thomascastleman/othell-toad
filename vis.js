@@ -37,17 +37,19 @@ function printState(stateAtom, xoffset, yoffset) {
   }
 }
 
-
 var yoffset = 0;
 var xoffset = 0;
 
+var STATES_PER_COLUMN = 4;
+
 for(b = 0; b < 13; b++) {  
-  if(GameState.atom("GameState"+b) != null) {
-    printState(GameState.atom("GameState"+b), xoffset, yoffset);
-  }
-  yoffset = yoffset + 80
-  if (b % 4 == 0) {
+  if (b > 0 && b % STATES_PER_COLUMN == 0) {
       xoffset = xoffset + 80;
       yoffset = 0;
   }
+  if(GameState.atom("GameState"+b) != null) {
+    printState(GameState.atom("GameState"+b), xoffset, yoffset);
+  }
+
+  yoffset = yoffset + 80
 }
