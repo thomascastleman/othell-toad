@@ -445,3 +445,20 @@ inst optimizer_for_4x4_board {
 // }
 
 // TODO: If you place your pieces in all four corners, can your opponent win?
+
+// This run checks if you can win the game without having the last move. 
+// This was unsat, meaning that there was no instance where a player did not have the last move and still won
+run {
+    Game.boardSize = 4
+    traces
+
+    some final: GameState |  { 
+        no Game.next[final] // This is the final state
+        final.turn = White      //Black had the last move
+        winning[White]          //White wins
+    }
+} for exactly 2 Player, exactly 3 Tile, 13 GameState, exactly 1 Game, exactly 5 Int
+for {
+    optimizer_for_4x4_board
+    next is linear
+}
