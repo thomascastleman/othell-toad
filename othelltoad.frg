@@ -444,8 +444,6 @@ inst optimizer_for_4x4_board {
 //     next is linear
 // }
 
-// TODO: If you place your pieces in all four corners, can your opponent win?
-
 // This run checks if you can win the game without having the last move. 
 // Tested where black wins and white had the last move, and where white wins and black has the last move
 // This was unsat, meaning that there was no instance where a player did not have the last move and still won
