@@ -364,16 +364,19 @@ inst optimizer_for_4x4_board {
 
 // ======================== Checking Properties ======================== 
 
+// FIXME: This generates an instance with a final game state that has an invalid 
+// board, but seems to think that board is valid. (The board has a piece at a 
+// negative index). Evaluator is bugging out it seems.
 // Can White win on a 4x4 board? Yes
-// run {
-//     Game.boardSize = 4
-//     traces
-//     winning[White]
-// } for exactly 2 Player, exactly 3 Tile, 13 GameState, exactly 1 Game, exactly 5 Int
-// for {
-//     optimizer_for_4x4_board
-//     next is linear
-// }
+run {
+    Game.boardSize = 4
+    traces
+    winning[White]
+} for exactly 2 Player, exactly 3 Tile, 13 GameState, exactly 1 Game, exactly 5 Int
+for {
+    optimizer_for_4x4_board
+    next is linear
+}
 
 // Can Black win by eliminating all of the White pieces? No, this is unsat.
 // Same for vice versa.
@@ -485,22 +488,22 @@ inst optimizer_for_4x4_board {
 //     next is linear
 // }
 
-//Check if White wins when Black has all the corners - unsat
-run {
-    Game.boardSize = 4
-    traces
+// Check if White wins when Black has all the corners - unsat
+// run {
+//     Game.boardSize = 4
+//     traces
 
-    some final: GameState |  { 
-        no Game.next[final] // This is the final state
-        winning[White]          //White wins
+//     some final: GameState |  { 
+//         no Game.next[final] // This is the final state
+//         winning[White]          //White wins
 
-        //Black has all the corners
-        all row, col: Game.indexes | isCorner[row, col] implies {
-            final.board[row, col] = playerToPiece[Black]
-        }
-    }
-} for exactly 2 Player, exactly 3 Tile, 13 GameState, exactly 1 Game, exactly 5 Int
-for {
-    optimizer_for_4x4_board
-    next is linear
-}
+//         //Black has all the corners
+//         all row, col: Game.indexes | isCorner[row, col] implies {
+//             final.board[row, col] = playerToPiece[Black]
+//         }
+//     }
+// } for exactly 2 Player, exactly 3 Tile, 13 GameState, exactly 1 Game, exactly 5 Int
+// for {
+//     optimizer_for_4x4_board
+//     next is linear
+// }
